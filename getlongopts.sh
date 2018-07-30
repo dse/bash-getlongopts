@@ -24,6 +24,7 @@ getlongopts () {
         return 2
     fi
 
+    local result
     local optstring="$1"; shift
     local name="$1"; shift
 
@@ -65,12 +66,14 @@ getlongopts () {
     shift
 
     # positional arguments are now the arguments passed into
-    # `getlongopts` after terminating "--" or "" argument.
+    # `getlongopts` after terminating "--" argument.
 
     # Run `getopts` builtin; check for failure code.
     getopts "${optstring}-:" "${name}"
-    if (( $? )) ; then
-        return $?
+    result="$?"
+    if (( $result )) ; then
+        >&2 echo "getopts returned $result"
+        return $result
     fi
 
     # Check for short option.
