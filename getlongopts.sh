@@ -72,7 +72,6 @@ getlongopts () {
     getopts "${optstring}-:" "${name}"
     result="$?"
     if (( $result )) ; then
-        >&2 echo "getopts returned $result"
         return $result
     fi
 
