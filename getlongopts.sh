@@ -10,12 +10,43 @@
 #
 # Each <longopttype> is one of the following:
 #   0|no           -- option does not take an argument
-#   1|required|yes -- option takes a required argument
-#   2|optional|?   -- option takes an optional argument
+#   1|required|yes -- option takes a required argument;
+#                     can be specified via --<name>=<value>
+#                     or --<name> <value>
+#   2|optional|?   -- option takes an optional argument;
+#                     must be specified via --<name>=<value>
 #
 # After a successful invocation of `getlongopts` processes a long
 # option, `getlongopts` sets LONGOPTARGS, an array, to the argument(s)
 # passed that specified the long option.
+#
+# If `getlongopts` processes a short option; side effects, return
+# value, and other behavior are exactly the same as with the `getopts`
+# builtin, and the LONGOPTARGS array is emptied.
+#
+# If `getlongopts` processes a long option:
+#
+# - The "--" argument by itself ends option parsing; <name> is set to
+#   "?" and `getlongopts` returns a nonzero value.
+#
+# - If an invalid long option is specified; side effects, return
+#   value, and other behavior are the same as when `getopts` or
+#   `getlongopts` processes an invalid short option.  In addition,
+#   LONGOPTARGS contains "--<name>" or "--<name>=<value>" if silent
+#   error reporting is in effect, or is emptied otherwise.
+#
+# - If a long option is missing its required argument; side effects,
+#   return value, and other behavior are exactly the same as when
+#   `getopts` or `getlongopts` processes a short option missing its
+#   required argument.  In addition, LONGOPTARGS contains "--<name>"
+#   if silent error reporting is in effect, or is emptied otherwise.
+#
+# - If a long option that takes no argument is supplied with an
+#   argument via "--<name>=<value>", then <name> is set to "?", OPTARG
+#   is unset, an error message is issued, and LONGOPTARGS is empted.
+#   If silent error reporting is in effect, <name> is set to ":",
+#   OPTARG is set to the name of the option, and LONGOPTARGS contains
+#   "--<name>".
 
 declare -a LONGOPTARGS
 getlongopts () {
@@ -108,6 +139,7 @@ getlongopts () {
         if (( !$silent )) ; then
             [[ "${OPTERR}" != "0" ]] && >&2 echo "$0: invalid option: --${longoptname}"
             unset OPTARG
+            LONGOPTARGS=()
         else
             OPTARG="${longoptname}"
         fi
@@ -116,13 +148,13 @@ getlongopts () {
 
     type="${longoptions[${longoptname}]}"
     case "$type" in
-        "2")
+        "2")                    # takes optional argument
             printf -v "$name" '%s' "$longoptname"
             unset OPTARG
             [[ -v "longoptvalue" ]] && OPTARG="${longoptvalue}"
             return 0
             ;;
-        "1")
+        "1")                    # takes required argument
             if [[ -v "longoptvalue" ]] ; then
                 printf -v "$name" '%s' "$longoptname"
                 OPTARG="${longoptvalue}"
@@ -139,6 +171,7 @@ getlongopts () {
                     printf -v "$name" '%s' '?'
                     unset OPTARG
                     [[ "${OPTERR}" != "0" ]] && >&2 echo "$0: --${longoptname}: missing argument"
+                    LONGOPTARGS=()
                 else
                     printf -v "$name" '%s' ':'
                     OPTARG="${!name}"
@@ -146,9 +179,17 @@ getlongopts () {
                 return 1
             fi
             ;;
-        "0")
+        "0")                    # takes no argument
             if [[ -v "longoptvalue" ]] ; then
-                >&2 echo "$0: --${longoptname} takes no argument."
+                if (( !$silent )) ; then
+                    printf -v "$name" '%s' '?'
+                    unset OPTARG
+                    [[ "${OPTERR}" != "0" ]] && >&2 echo "$0: --${longoptname} takes no argument."
+                    LONGOPTARGS=()
+                else
+                    printf -v "$name" '%s' ':'
+                    OPTARG="${!name}"
+                fi
                 return 1
             fi
             printf -v "$name" '%s' "$longoptname"
