@@ -178,7 +178,7 @@ getlongopts () {
                 OPTARG="${longoptvalue}"
                 return 0
             elif (( $OPTIND <= $# )) ; then
-                eval "longoptvalue=\${$((OPTIND - 1))}"
+                eval "longoptvalue=\${$((OPTIND))}"
                 LONGOPTARGS+=("${longoptvalue}")
                 OPTIND=$((OPTIND + 1))
                 printf -v "$name" '%s' "$longoptname"
