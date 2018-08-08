@@ -82,3 +82,48 @@ non-option arguments.  This includes long options.
 `getlongopts`, like `getopts`, does not support short options with
 optional parameters.  It supports long options with optional
 parameters, however.
+
+Multiple aliases to the same option must be specified individually.
+
+`getlongopts` does not process incomplete option names.
+
+## Example
+
+    declare -a patterns
+
+    patterns=()
+    dry_run=0
+    verbose=0
+    color=""
+
+    declare -a longoptions
+    longoptions=(
+        help    no
+        dry-run no
+        verbose no
+        regexp  yes
+        color   optional
+        colour  optional
+    )
+
+    while getlongopts "hnve" OPTION "${longoptions[@]}" -- "$@" ; do
+        case "${OPTION}" in
+            h|help)
+                usage; exit 0;;
+            v|verbose)
+                verbose=$((verbose + 1));;
+            n|dry-run)
+                dry_run=1;;
+            e|regexp)
+                patterns+=("${OPTARG}");;
+            color|colour)
+                if [[ -v "OPTARG" ]] ; then
+                    color="${OPTARG}"
+                else
+                    color=default
+                fi
+            "?")
+                exit 1;;
+        esac
+    done
+    shift $((OPTIND - 1))
