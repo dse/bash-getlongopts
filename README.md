@@ -1,4 +1,4 @@
-# getlongopts-bash
+# bash-getlongopts
 
 A bash function for processing long options and short options
 
