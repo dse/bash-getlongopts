@@ -85,7 +85,7 @@ parameters, however.
 
 Multiple aliases to the same option must be specified individually.
 
-`getlongopts` does not process incomplete option names.
+**`getlongopts` does not process abbreviations.**
 
 ## Example
 
