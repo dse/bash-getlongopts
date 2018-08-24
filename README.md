@@ -1,6 +1,9 @@
 # bash-getlongopts
 
-A bash function for processing long options and short options
+A bash function for processing long options and short options.
+
+I wrote this because I am a weirdo masochist who enjoys writing GNU
+Bash scripts.
 
 ## Usage
 
