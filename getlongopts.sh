@@ -1,43 +1,151 @@
 # -*- mode: sh-mode; sh-shell: bash -*-
 
+# option names:
+#     f
+#     foo
+#     f|foo
+# suffixes
+#     =[<type>]
+#     :[<type>]
+_getlongoptionadd () {
+    local optionname
+    local optionrequired
+    local -a optionnames
+    local i
+
+    optionname="$1"; shift
+    optionrequired="$1"; shift
+
+    IFS='|,' read -r -a optionnames <<<"${optionname}"
+    for i in "${optionnames[@]}" ; do
+        if [[ "${i}" =~ ^.$ ]] ; then # emacs won't indent `case ... in ?)` properly.  sad face.
+            case "${optionrequired}" in
+                "0"|"no")
+                    optstring="${i}${optstring}"
+                    ;;
+                "1"|"required"|"yes")
+                    optstring="${i}:${optstring}"
+                    ;;
+                "2"|"optional"|"?")
+                    # NOTE: short options cannot take optional values.
+                    # it'll be required when specifying the short option.
+                    optstring="${i}:${optstring}"
+                    exit 1
+                    ;;
+            esac
+        else
+            case "${optionrequired}" in
+                "0"|"no")
+                    longoptions["${i}"]=0
+                    ;;
+                "1"|"required"|"yes")
+                    longoptions["${i}"]=1
+                    ;;
+                "2"|"optional"|"?")
+                    longoptions["${i}"]=2
+                    ;;
+            esac
+        fi
+    done
+}
+
 declare -a LONGOPTARGS
 getlongopts () {
+    local result
+    local optstring
+    local name
+    local silent
+    local optprefix
+    local -A longoptions
+    local longoptstype
+    local optionrequired
+    local optionname
+    local oldOPTIND
+    local optnumargs
+    local i
+    local type                  # 0|no, 1|yes|required, or 2|optional
+    local longoptname
+    local longoptvalue
+
     if (( $# < 3 )) ; then
-        >&2 echo "getlongopts: usage: getlongopts <optstring> <name> [<longoptname> <longopttype> ...] -- [<arg> ...]"
+        >&2 echo "getlongopts: usage: getlongopts <optstring> <name> [--type-1] [<longoptname> <longopttype> ...] -- [<arg> ...]"
         return 2
     fi
 
-    local result
-    local optstring="$1"; shift
-    local name="$1"; shift
+    optstring="$1"; shift
+    name="$1"; shift
 
     # check for silent error reporting
-    local silent=0
+    silent=0
+    optprefix=""
     if [[ "$optstring" = ":"* ]] ; then
         silent=1
+
+        # so we can prepend to optstring; we'll reconstruct later
+        optprefix=":"
+        optstring="${optstring#:}"
     fi
 
     LONGOPTARGS=()
 
     # collect long options into associative array
-    local -A longoptions
-    while (( $# >= 3 )) && [[ "$1" != "--" ]] ; do
-        case "$2" in
-            "0"|"no")
-                longoptions["$1"]=0
+    longoptstype=1
+    if (( $# >= 1 )) ; then
+        case "$1" in
+            --type-1)
+                longoptstype=1
+                shift
                 ;;
-            "1"|"required"|"yes")
-                longoptions["$1"]=1
+            --type-2)
+                longoptstype=2
+                shift
                 ;;
-            "2"|"optional"|"?")
-                longoptions["$1"]=2
-                ;;
-            *)
-                >&2 echo "getlongopts: invalid type: $2"
+            -*)
+                >&2 echo "getlongopts: invalid longopts type: $1"
                 return 1
         esac
-        shift 2
-    done
+    fi
+
+    if (( longoptstype == 1 )) ; then
+        while (( $# >= 3 )) && [[ "$1" != "--" ]] ; do
+            optionname="$1"
+            case "$2" in
+                "0"|"no")
+                    optionrequired=no
+                    ;;
+                "1"|"required"|"yes")
+                    optionrequired=yes
+                    ;;
+                "2"|"optional"|"?")
+                    optionrequired=optional
+                    ;;
+                *)
+                    >&2 echo "getlongopts: invalid type: $2"
+                    return 1
+            esac
+            _getlongoptionadd "${optionname}" "${optionrequired}"
+            shift 2
+        done
+    elif (( longoptstype == 2 )) ; then
+        while (( $# >= 2 )) && [[ "$1" != "--" ]] ; do
+            optionname="$1"
+            optionrequired="no"
+            case "$1" in
+                *=*)
+                    optionname="${optionname%%=*}"
+                    optionrequired=yes
+                    ;;
+                *:*)
+                    optionname="${optionname%%:*}"
+                    optionrequired=optional
+                    ;;
+            esac
+            _getlongoptionadd "${optionname}" "${optionrequired}"
+            shift
+        done
+    else
+        return 1
+    fi
 
     # Make sure "--" is used to terminate long option arguments.
     if (( !$# )) && [[ "$1" != "--" ]] ; then
@@ -48,8 +156,16 @@ getlongopts () {
 
     shift
 
+    # reconstruct $optstring
+    optstring="${optprefix}${optstring}"
+    optprefix=""
+
     # positional arguments are now the arguments passed into
     # `getlongopts` after terminating "--" argument.
+
+    # for checking if short option is one or two arguments
+    oldOPTIND="${OPTIND}"
+    optnumargs=1
 
     # Run `getopts` builtin; check for failure code.
     getopts "${optstring}-:" "${name}"
@@ -60,6 +176,19 @@ getlongopts () {
 
     # Check for short option.
     if [[ "${!name}" != "-" ]] ; then
+        optnumargs=$((OPTIND - oldOPTIND))
+        if (( optnumargs == 1 )) ; then
+            # -x or -x<value>
+            LONGOPTARGS=("-${!name}${OPTARG}")
+        elif (( optnumargs == 2 )) ; then
+            # -x <value>
+            LONGOPTARGS=("-${!name}" "${OPTARG}")
+        else
+            >&2 echo "getlongopts: UNEXPECTED ERROR 1"
+            LONGOPTARGS=()
+            return 1
+        fi
+        >&2 echo "LONGOPTARGS=(${LONGOPTARGS[@]@Q})"
         return 0
     fi
 
@@ -69,10 +198,6 @@ getlongopts () {
         printf -v "${name}" '%s' '?'
         return 1
     fi
-
-    local type                  # 0, 1, or 2
-    local longoptname
-    local longoptvalue
 
     LONGOPTARGS=("--${OPTARG}")
     case "${OPTARG}" in
@@ -100,13 +225,13 @@ getlongopts () {
 
     type="${longoptions[${longoptname}]}"
     case "$type" in
-        "2")                    # takes optional argument
+        "2"|"optional"|"?")     # takes optional argument
             printf -v "$name" '%s' "$longoptname"
             unset OPTARG
             [[ -v "longoptvalue" ]] && OPTARG="${longoptvalue}"
             return 0
             ;;
-        "1")                    # takes required argument
+        "1"|"required"|"yes")   # takes required argument
             if [[ -v "longoptvalue" ]] ; then
                 printf -v "$name" '%s' "$longoptname"
                 OPTARG="${longoptvalue}"
@@ -131,7 +256,7 @@ getlongopts () {
                 return 1
             fi
             ;;
-        "0")                    # takes no argument
+        "0"|"no")               # takes no argument
             if [[ -v "longoptvalue" ]] ; then
                 if (( !$silent )) ; then
                     printf -v "$name" '%s' '?'
