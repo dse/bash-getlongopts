@@ -30,7 +30,6 @@ _getlongoptionadd () {
                     # NOTE: short options cannot take optional values.
                     # it'll be required when specifying the short option.
                     optstring="${i}:${optstring}"
-                    exit 1
                     ;;
             esac
         else
@@ -168,6 +167,7 @@ getlongopts () {
     optnumargs=1
 
     # Run `getopts` builtin; check for failure code.
+
     getopts "${optstring}-:" "${name}"
     result="$?"
     if (( $result )) ; then
