@@ -188,7 +188,6 @@ getlongopts () {
             LONGOPTARGS=()
             return 1
         fi
-        >&2 echo "LONGOPTARGS=(${LONGOPTARGS[@]@Q})"
         return 0
     fi
 
