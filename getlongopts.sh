@@ -19,6 +19,7 @@ _getlongoptionadd () {
     IFS='|,' read -r -a optionnames <<<"${optionname}"
     for i in "${optionnames[@]}" ; do
         if [[ "${i}" =~ ^.$ ]] ; then # emacs won't indent `case ... in ?)` properly.  sad face.
+            # single character
             case "${optionrequired}" in
                 "0"|"no")
                     optstring="${i}${optstring}"
@@ -48,7 +49,103 @@ _getlongoptionadd () {
     done
 }
 
+# usage:
+#     getlongoptsadd [<option> ...] [--] <arrayvarname> <optionspec> ...
+#
+# <arrayvarname>
+#     usually something like 'longopts'.
+#     The <name> argument to getlongopts.
+#
+# each <optionspec> argument is:
+#     x      one-letter option with no parameter
+#     x[n]   "                 with optional parameter
+#     x<n>   "                 with required parameter (can be empty)
+#     x(n)   "                      "
+#     x{n}   "                      "
+#
+#     xxx       long option name with no parameter
+#     xxx[=n]   "                with optional parameter
+#     xxx=[n]   "                with required parameter (can be empty)
+#     xxx=<n>   "                     "
+#     xxx=(n)   "                     "
+#     xxx={n}   "                     "
+#     xxx=xxx   "                     "
+#
+# options:
+#     -r, --required
+#     -o, --optional
+#         --type-1 (default)
+#         --type-2
+getlongoptsadd () {
+    local OPTARG OPTIND OPTERR OPTION
+    local optionrequired varname i
+    local -a optionnames
+    local longoptstype
+
+    optionrequired=no
+    optionnames=()
+    longoptstype=1
+
+    while getopts 'ro-:' OPTION ; do
+        case "${OPTION}" in
+            r)
+                optionrequired=required;;
+            o)
+                optionrequired=optional;;
+            -)
+                case "${OPTARG}" in
+                    "")
+                        break;;
+                    "required")
+                        optionrequired=required;;
+                    "optional")
+                        optionrequired=optional;;
+                    "type-1")
+                        longoptstype=1;;
+                    "type-2")
+                        longoptstype=2;;
+                esac
+                ;;
+        esac
+    done
+    shift $((OPTIND - 1))
+
+    varname="$1"; shift
+
+    for i ; do
+        while true ; do
+            case "$i" in
+                '--'?*) i="${i#--}";;
+                '-'?*)  i="${i#-}";;
+
+                ?'<'*'>')   i="${i%%'<'*'>'}"; optionrequired=required; break;;
+                ?'('*')')   i="${i%%'('*')'}"; optionrequired=required; break;;
+                ?'['*']')   i="${i%%'['*']'}"; optionrequired=optional; break;;
+                ?'{'*'}')   i="${i%%'{'*'}'}"; optionrequired=required; break;;
+
+                ?*'[='*']') i="${i%%'[='*']'}"; optionrequired=optional;;
+                ?*'=<'*'>') i="${i%%'=<'*'>'}"; optionrequired=required;;
+                ?*'=('*')') i="${i%%'=('*')'}"; optionrequired=required;;
+                ?*'=['*']') i="${i%%'=['*']'}"; optionrequired=optional;;
+                ?*'={'*'}') i="${i%%'={'*'}'}"; optionrequired=required;;
+                ?*'='*)     i="${i%%'='*}"    ; optionrequired=required;;
+
+                *)          break;;
+            esac
+        done
+        optionnames+=("$i")
+        echo "$i"
+    done
+}
+
 declare -a LONGOPTARGS
+
+# usage:
+#     getlongopts <optstring> <name> [--type-1] [<longoptname> <longopttype> ...] -- [<arg> ...]
+#     getlongopts <optstring> <name> --type-2 [<longoptspec> ...] -- [<arg> ...]
+#
+# <name> is usually something like 'longopts'.
+#
 getlongopts () {
     local result
     local optstring
